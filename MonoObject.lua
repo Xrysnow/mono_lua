@@ -25,8 +25,8 @@ function M:setPropertyValue(name, ...)
     lib.mono_property_set_value(property, self._hdl, make_param(...), nil)
 end
 
-function M:getFieldValue(name, ...)
-    local field = self._cls:getProperty(name)
+function M:getFieldValue(name)
+    local field = self._cls:getField(name)
     local value = lib.mono_field_get_value_object(lib.domain, field, self._hdl)
     check_ptr(value, "failed to get field '%s' of object '%s'", name, self._cls:getName())
     return require('MonoObject')(value)
