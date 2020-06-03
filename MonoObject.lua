@@ -3,14 +3,22 @@ local M = class('MonoInstance')
 local lib = require('_lib')
 local ffi = require("ffi")
 
-function M:ctor(object)
+function M:ctor(object, gc_handle)
     check_ptr(object, "invalid handle")
     self._hdl = object
+    if not gc_handle then
+        gc_handle = lib.mono_gchandle_new(object, false)
+    end
+    self._gc = gc_handle
     local klass = lib.mono_object_get_class(object)
     check_ptr(klass, "failed to get class of object")
     self._klass = klass
     ---@type MonoClass
     self._cls = require('MonoClass')(klass)
+end
+
+function M:dtor()
+    lib.mono_gchandle_free(self._gc)
 end
 
 function M:getPropertyValue(name, ...)
