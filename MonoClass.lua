@@ -66,8 +66,12 @@ function M:getProperty(name)
 end
 
 function M:invokeStaticMethod(name, ...)
-    return lib.mono_runtime_invoke(self:getMethod(name, select("#", ...)),
-                                   nil, make_param(...), nil)
+    local obj = lib.mono_runtime_invoke(self:getMethod(name, select("#", ...)),
+                                        nil, make_param(...), nil)
+    if ffi.isnullptr(obj) then
+        return nil
+    end
+    return require('MonoObject')(obj)
 end
 
 function M:createInstance(...)
