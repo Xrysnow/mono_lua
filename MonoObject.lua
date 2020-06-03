@@ -46,6 +46,18 @@ function M:invoke(name, ...)
     return M(ret)
 end
 
+---@param cls MonoClass
+function M:cast(cls)
+    if type(cls) == 'cdata' then
+        assert(ffi.istype('MonoClass*', cls))
+        cls = require('MonoClass')(cls)
+    end
+    if not cls:isAssignableFrom(self:getClass()) then
+        error(("can't cast from '%s' to '%s'"):format(self:getClassName(), cls:getName()))
+    end
+    return M(lib.mono_object_castclass_mbyref(self._hdl, cls._hdl))
+end
+
 --
 
 function M:hash()
