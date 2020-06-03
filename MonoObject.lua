@@ -53,21 +53,26 @@ function M:hash()
 end
 
 function M:unbox()
-    local p = lib.mono_object_unbox(self._hdl)
-    if ffi.isnullptr(p) then
-        return nil
+    if self:getClass()._hdl == lib.mono_get_string_class() then
+        -- string type
+        return self:tostring()
     end
     local enum = require('enum').MonoTypeEnum
     local map = require('MonoType').ValueTypeMap
     local t = self:getClass():getType()
     t = require('MonoType').getILType(t)
     if map[t] then
+        -- value type
         local ctype = map[t] .. '*'
+        local p = lib.mono_object_unbox(self._hdl)
+        if ffi.isnullptr(p) then
+            return nil
+        end
         return ffi.cast(ctype, p)[0]
     elseif t == enum.MONO_TYPE_STRING then
         return self:tostring()
     end
-    return p
+    return nil
 end
 
 function M:clone()
