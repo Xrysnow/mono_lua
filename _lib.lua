@@ -51,4 +51,54 @@ function M.setPath(path)
     M.lib.mono_set_assemblies_path(path)
 end
 
+local _asms = {}
+
+function M.loadAssembly(path, ...)
+    for _, v in ipairs({ path, ... }) do
+        M.getAssembly(v)
+    end
+end
+
+function M.unloadAssembly(path)
+    if not _asms[path] then
+        return
+    end
+    local asm = M.getAssembly(path)
+    _asms[path] = nil
+    _asms[asm:getPath()] = nil
+    _asms[asm._hdl] = nil
+    for i = 1, #_asms do
+        if _asms[i] == asm then
+            table.remove(_asms, i)
+            break
+        end
+    end
+    asm:close()
+end
+
+---@return MonoAssembly
+function M.getAssembly(path_or_hdl)
+    if _asms[path_or_hdl] then
+        return _asms[path_or_hdl]
+    end
+    if type(path_or_hdl) == 'cdata' then
+        if ffi.istype('MonoImage*', path_or_hdl) then
+            path_or_hdl = M.lib.mono_image_get_assembly(path_or_hdl)
+        end
+        check_ptr(path_or_hdl, "invalid handle")
+    end
+    local asm = require('MonoAssembly')(path_or_hdl)
+    _asms[asm:getPath()] = asm
+    _asms[path_or_hdl] = asm
+    _asms[asm._hdl] = asm
+    table.insert(_asms, asm)
+    return asm
+end
+
+function M.getClass(handle)
+    assert(ffi.istype('MonoClass*', handle))
+    check_ptr(handle, "invalid handle")
+    return M.getAssembly(M.lib.mono_class_get_image(handle)):getClass(handle)
+end
+
 return M
