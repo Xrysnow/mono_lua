@@ -47,7 +47,7 @@ function M.setDirs(assembly_dir, config_dir)
     M.lib.mono_set_dirs(assembly_dir, config_dir)
 end
 
-function M.setAssembliesPath(path)
+function M.setPath(path)
     M.lib.mono_set_assemblies_path(path)
 end
 
