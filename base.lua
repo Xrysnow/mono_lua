@@ -1,9 +1,5 @@
 --
 
-function printf(fmt, ...)
-    print(string.format(tostring(fmt), ...))
-end
-
 local setmetatableindex_
 setmetatableindex_ = function(t, index)
     if type(t) == "userdata" then
@@ -21,7 +17,7 @@ setmetatableindex_ = function(t, index)
         end
     end
 end
-setmetatableindex = setmetatableindex_
+local setmetatableindex = setmetatableindex_
 
 local ffi = require('ffi')
 local function dtor_proxy(ins, dtor)
@@ -201,131 +197,6 @@ function iskindof(obj, classname)
         return iskindof_(mt, classname)
     end
     return false
-end
-
-function handler(obj, method)
-    return function(...)
-        return method(obj, ...)
-    end
-end
-
-function table.nums(t)
-    local count = 0
-    for k, v in pairs(t) do
-        count = count + 1
-    end
-    return count
-end
-
-function table.keys(hashtable)
-    local keys = {}
-    for k, v in pairs(hashtable) do
-        keys[#keys + 1] = k
-    end
-    return keys
-end
-
-function table.values(hashtable)
-    local values = {}
-    for k, v in pairs(hashtable) do
-        values[#values + 1] = v
-    end
-    return values
-end
-
-function table.merge(dest, src)
-    for k, v in pairs(src) do
-        dest[k] = v
-    end
-end
-
-function table.indexof(array, value, begin)
-    for i = begin or 1, #array do
-        if array[i] == value then
-            return i
-        end
-    end
-    return false
-end
-
-function table.keyof(hashtable, value)
-    for k, v in pairs(hashtable) do
-        if v == value then
-            return k
-        end
-    end
-    return nil
-end
-
-function table.map(t, fn)
-    for k, v in pairs(t) do
-        t[k] = fn(v, k)
-    end
-end
-
-function table.walk(t, fn)
-    for k, v in pairs(t) do
-        fn(v, k)
-    end
-end
-
-function table.filter(t, fn)
-    for k, v in pairs(t) do
-        if not fn(v, k) then
-            t[k] = nil
-        end
-    end
-end
-
-function string.split(input, delimiter)
-    input = tostring(input)
-    delimiter = tostring(delimiter)
-    if (delimiter == '') then
-        return false
-    end
-    local pos, arr = 0, {}
-    -- for each divider found
-    for st, sp in function()
-        return string.find(input, delimiter, pos, true)
-    end do
-        table.insert(arr, string.sub(input, pos, st - 1))
-        pos = sp + 1
-    end
-    table.insert(arr, string.sub(input, pos))
-    return arr
-end
-
-function string.ltrim(input)
-    return string.gsub(input, "^[ \t\n\r]+", "")
-end
-
-function string.rtrim(input)
-    return string.gsub(input, "[ \t\n\r]+$", "")
-end
-
-function string.trim(input)
-    input = string.gsub(input, "^[ \t\n\r]+", "")
-    return string.gsub(input, "[ \t\n\r]+$", "")
-end
-
-function string.utf8len(input)
-    local len = string.len(input)
-    local left = len
-    local cnt = 0
-    local arr = { 0, 0xc0, 0xe0, 0xf0, 0xf8, 0xfc }
-    while left ~= 0 do
-        local tmp = string.byte(input, -left)
-        local i = #arr
-        while arr[i] do
-            if tmp >= arr[i] then
-                left = left - i
-                break
-            end
-            i = i - 1
-        end
-        cnt = cnt + 1
-    end
-    return cnt
 end
 
 require('ffi_util')
