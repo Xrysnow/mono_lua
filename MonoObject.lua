@@ -1,5 +1,5 @@
----@class MonoInstance
-local M = class('MonoInstance')
+---@class MonoObject
+local M = class('MonoObject')
 local lib = require('_lib')
 local ffi = require("ffi")
 
