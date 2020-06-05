@@ -16,7 +16,8 @@ function M.getArrayType(t)
 end
 
 function M.getClass(t)
-    return lib.mono_type_get_class(check_ptr(t))
+    --return lib.mono_type_get_class(check_ptr(t))
+    return lib.mono_class_from_mono_type(check_ptr(t))
 end
 
 function M.isStruct(t)
