@@ -24,6 +24,9 @@ end
 function M:getImage()
     return self._image
 end
+function M:getPath()
+    return self._path
+end
 
 function M:getClass(namespace, name)
     local klass = lib.mono_class_from_name(self:getImage(), namespace, name)
