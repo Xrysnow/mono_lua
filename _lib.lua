@@ -87,6 +87,15 @@ function M.getAssembly(path_or_hdl)
         end
         check_ptr(path_or_hdl, "invalid handle")
     end
+    if type(path_or_hdl) == 'string' then
+        local hdl = M.lib.mono_domain_assembly_open(M.domain, path_or_hdl)
+        if ffi.isnullptr(hdl) then
+            -- search internal
+            path_or_hdl = M.core_path .. path_or_hdl
+        else
+            path_or_hdl = hdl
+        end
+    end
     local asm = require('MonoAssembly')(path_or_hdl)
     _asms[asm:getPath()] = asm
     _asms[path_or_hdl] = asm
