@@ -13,8 +13,12 @@ function M.init(bin_path, domain_name, lib_dir, etc_dir)
     return M
 end
 
-function M.finish()
-    require('_lib').finish()
-end
+local ffi = require('ffi')
+M['.dtor_proxy'] = ffi.gc(
+        ffi.new('int[0]'),
+        function()
+            require('_lib').finish()
+        end
+)
 
 return M
