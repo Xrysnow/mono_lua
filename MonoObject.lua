@@ -13,8 +13,7 @@ function M:ctor(object, gc_handle)
     local klass = lib.mono_object_get_class(object)
     check_ptr(klass, "failed to get class of object")
     self._klass = klass
-    ---@type MonoClass
-    self._cls = require('MonoClass')(klass)
+    self._cls = lib.getClass(klass)
 end
 
 function M:dtor()
@@ -58,7 +57,7 @@ end
 function M:cast(cls)
     if type(cls) == 'cdata' then
         assert(ffi.istype('MonoClass*', cls))
-        cls = require('MonoClass')(cls)
+        cls = lib.getClass(cls)
     end
     if not cls:isAssignableFrom(self:getClass()) then
         error(("can't cast from '%s' to '%s'"):format(self:getClassName(), cls:getName()))
