@@ -51,14 +51,14 @@ function M:getMethod(name, param_count)
     return method
 end
 
-function M:getField(name)
+function M:getFieldHandle(name)
     assert(name)
     local field = lib.mono_class_get_field_from_name(self._hdl, name)
     check_ptr(field, "failed to get field '%s' of class '%s'", name, self._name)
     return field
 end
 
-function M:getProperty(name)
+function M:getPropertyHandle(name)
     assert(name)
     local property = lib.mono_class_get_property_from_name(self._hdl, name)
     check_ptr(property, "failed to get property '%s' of class '%s'", name, self._name)
