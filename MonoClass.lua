@@ -22,13 +22,7 @@ function M:ctor(klass)
     self._events = self:_getEvents()
     self._interfaces = self:_getInterfaces()
     self._nested_types = self:_getNestedTypes()
-    --
-    --print(self._name)
-    --for i, v in ipairs(self._methods) do
-    --    if v.name == '.ctor' then
-    --        print(v.name, v.sig.param_count, v.class==self._hdl, v.param_names[1], v.param_names[2])
-    --    end
-    --end
+    --TODO: nested types
 end
 
 function M:getMethodFromDesc(desc)

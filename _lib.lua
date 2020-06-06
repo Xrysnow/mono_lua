@@ -104,6 +104,7 @@ function M.getAssembly(path_or_hdl)
     return asm
 end
 
+---@return MonoClass
 function M.getClass(handle)
     assert(ffi.istype('MonoClass*', handle))
     check_ptr(handle, "invalid handle")

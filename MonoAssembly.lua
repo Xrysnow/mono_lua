@@ -28,6 +28,7 @@ function M:getPath()
     return self._path
 end
 
+---@return MonoClass
 function M:getClass(namespace, name)
     local klass = lib.mono_class_from_name(self:getImage(), namespace, name)
     check_ptr(klass, "failed to get class '%s.%s' from '%s'", namespace, name, self._path)

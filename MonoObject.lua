@@ -65,8 +65,6 @@ function M:cast(cls)
     return M(lib.mono_object_castclass_mbyref(self._hdl, cls._hdl))
 end
 
---
-
 function M:hash()
     return tonumber(lib.mono_object_hash(self._hdl))
 end
@@ -82,12 +80,11 @@ function M:unbox()
     t = require('MonoType').getILType(t)
     if map[t] then
         -- value type
-        local ctype = map[t] .. '*'
         local p = lib.mono_object_unbox(self._hdl)
         if ffi.isnullptr(p) then
             return nil
         end
-        return ffi.cast(ctype, p)[0]
+        return ffi.cast(map[t] .. '*', p)[0]
     elseif t == enum.MONO_TYPE_STRING then
         return self:tostring()
     end
