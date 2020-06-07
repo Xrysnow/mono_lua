@@ -19,6 +19,7 @@ function M:ctor(path_or_hdl)
     end
     self._path = path
     self._name = ffi.string(lib.mono_stringify_assembly_name(lib.mono_assembly_get_name(self._hdl)))
+    self._classes = {}
 end
 
 function M:getImage()
@@ -29,11 +30,34 @@ function M:getPath()
 end
 
 ---@return MonoClass
-function M:getClass(namespace, name)
-    local klass = lib.mono_class_from_name(self:getImage(), namespace, name)
-    check_ptr(klass, "failed to get class '%s.%s' from '%s'", namespace, name, self._path)
+function M:getClass(ns_or_hdl, name)
+    local classes = self._classes
+    local klass
+    if type(ns_or_hdl) == 'string' then
+        assert(type(name) == 'string')
+        if classes[ns_or_hdl] and classes[ns_or_hdl][name] then
+            return classes[ns_or_hdl][name]
+        end
+        klass = lib.mono_class_from_name(self:getImage(), ns_or_hdl, name)
+    elseif type(ns_or_hdl) == 'cdata' then
+        if classes[ns_or_hdl] then
+            return classes[ns_or_hdl]
+        end
+        klass = ns_or_hdl
+    else
+        error('invalid param type')
+    end
+    check_ptr(klass, "failed to get class '%s.%s' from '%s'", ns_or_hdl, name, self._path)
     lib.mono_class_init(klass)
-    return require('MonoClass')(klass)
+    local cls = require('MonoClass')(klass)
+    local ns = cls:getNamespace()
+    name = cls:getName()
+    if not classes[ns] then
+        classes[ns] = {}
+    end
+    classes[ns][name] = cls
+    classes[klass] = cls
+    return cls
 end
 
 function M:close()
