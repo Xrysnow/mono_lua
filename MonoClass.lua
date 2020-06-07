@@ -8,13 +8,8 @@ function M:ctor(klass)
     self._hdl = klass
     self._ns = ffi.string(lib.mono_class_get_namespace(klass))
     self._name = ffi.string(lib.mono_class_get_name(klass))
-    --
-    self._vt = lib.mono_class_vtable(lib.domain, klass)
-    --
-    --self._num_fields = tonumber(lib.mono_class_num_fields(klass))
-    --self._num_methods = tonumber(lib.mono_class_num_methods(klass))
-    --self._num_properties = tonumber(lib.mono_class_num_properties(klass))
-    --self._num_events = tonumber(lib.mono_class_num_events(klass))
+    self._rank = tonumber(lib.mono_class_get_rank(klass))
+    self._type = lib.mono_class_get_type(klass)
     --
     self._fields = self:_getFields()
     self._methods = self:_getMethods()
