@@ -99,4 +99,48 @@ function M.getUnderlyingType(t)
     return lib.mono_type_get_underlying_type(check_ptr(t))
 end
 
+--
+
+local luamap = {
+    ['bool[1]']     = 'mono_get_boolean_class',
+    ['char[1]']     = 'mono_get_char_class',
+    ['int8_t[1]']   = 'mono_get_sbyte_class',
+    ['uint8_t[1]']  = 'mono_get_byte_class',
+    ['int16_t[1]']  = 'mono_get_int16_class',
+    ['uint16_t[1]'] = 'mono_get_uint16_class',
+    ['int32_t[1]']  = 'mono_get_int32_class',
+    ['uint32_t[1]'] = 'mono_get_uint32_class',
+    ['int64_t[1]']  = 'mono_get_int64_class',
+    ['uint64_t[1]'] = 'mono_get_uint64_class',
+    ['float[1]']    = 'mono_get_single_class',
+    ['double[1]']   = 'mono_get_double_class',
+    --
+    --['int[1]'] = '',
+    --['unsigned int[1]'] = '',
+}
+
+function M.fromCdata(v)
+    assert(type(v) == 'cdata')
+    if ffi.istype('MonoObject*', v) then
+        local klass = check_ptr(lib.mono_object_get_class(v))
+        local t = check_ptr(lib.mono_class_get_type(klass))
+        return t, klass
+    elseif ffi.istype('MonoString*', v) then
+        local klass = check_ptr(lib.mono_get_string_class())
+        local t = check_ptr(lib.mono_class_get_type(klass))
+        return t, klass
+    else
+        -- value
+        for k, f in pairs(luamap) do
+            if ffi.istype(k, v) then
+                local klass = check_ptr(lib[f]())
+                local t = check_ptr(lib.mono_class_get_type(klass))
+                return t, klass
+            end
+        end
+        -- not found
+        error(("can't find mono type of '%s'"):format(tostring(v)))
+    end
+end
+
 return M
