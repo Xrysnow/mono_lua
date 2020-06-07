@@ -143,4 +143,79 @@ function M.fromCdata(v)
     end
 end
 
+local _value_class_map = {
+    mono_get_boolean_class = 'bool',
+    mono_get_char_class    = 'char',
+    mono_get_sbyte_class   = 'int8_t',
+    mono_get_byte_class    = 'uint8_t',
+    mono_get_int16_class   = 'int16_t',
+    mono_get_uint16_class  = 'uint16_t',
+    mono_get_int32_class   = 'int32_t',
+    mono_get_uint32_class  = 'uint32_t',
+    mono_get_int64_class   = 'int64_t',
+    mono_get_uint64_class  = 'uint64_t',
+    mono_get_single_class  = 'float',
+    mono_get_double_class  = 'double',
+
+    mono_get_string_class  = 'string',
+    mono_get_void_class    = 'void',
+}
+local _number_key = {
+    'char',
+    'int8_t',
+    'uint8_t',
+    'int16_t',
+    'uint16_t',
+    'int32_t',
+    'uint32_t',
+    'int64_t',
+    'uint64_t',
+    'float',
+    'double',
+}
+local value_class, value_type, number_type
+local function make_value_info()
+    if value_class then
+        return
+    end
+    value_class, value_type, number_type = {}, {}, {}
+    for k, v in pairs(_value_class_map) do
+        local klass = check_ptr(lib[k]())
+        local t = check_ptr(lib.mono_class_get_type(klass))
+        value_class[tostring(klass)] = v
+        value_class[v] = klass
+        value_type[tostring(t)] = v
+        value_type[v] = t
+    end
+    for _, v in ipairs(_number_key) do
+        number_type[v] = value_type[v]
+        number_type[tostring(value_type[v])] = v
+    end
+end
+
+function M.fromLua(v)
+    make_value_info()
+    local ty = type(v)
+    if ty == 'cdata' then
+        return M.fromCdata(v)
+    elseif ty == 'boolean' then
+        return value_type.bool, value_class.bool
+    elseif ty == 'string' then
+        return value_type.string, value_class.string
+    elseif ty == 'number' then
+        local klass = check_ptr(lib.mono_get_double_class())
+        local t = check_ptr(lib.mono_class_get_type(klass))
+        return t, klass
+    elseif ty == 'nil' then
+        return value_type.void, value_class.void
+    elseif ty == 'table' then
+        assert(rawget(v, '.classname') == 'MonoObject')
+        local cls = v:getClass()
+        return cls:getType(), cls._hdl
+    else
+        --TODO: function
+    end
+    error(("can't find mono type of '%s'"):format(ty))
+end
+
 return M
