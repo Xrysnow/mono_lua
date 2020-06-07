@@ -60,6 +60,10 @@ function M:getClass(ns_or_hdl, name)
     return cls
 end
 
+function M:hasNamespace(namespace)
+    return self._classes[namespace] ~= nil
+end
+
 function M:close()
     lib.mono_assembly_close(self._hdl)
 end
