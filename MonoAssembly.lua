@@ -20,6 +20,9 @@ function M:ctor(path_or_hdl)
     self._path = path
     self._name = ffi.string(lib.mono_stringify_assembly_name(lib.mono_assembly_get_name(self._hdl)))
     self._classes = {}
+    --
+    self:_makeTypes()
+    self:_makeIndex()
 end
 
 function M:getImage()
@@ -72,4 +75,104 @@ function M:setMain()
     lib.mono_assembly_set_main(self._hdl)
 end
 
+local insert = table.insert
+local sfind = string.find
+local function string_split(s, sep)
+    local ret = {}
+    if not sep or sep == '' then
+        local len = #s
+        for i = 1, len do
+            insert(ret, s:sub(i, i))
+        end
+    else
+        while true do
+            local p = sfind(s, sep)
+            if not p then
+                insert(ret, s)
+                break
+            end
+            local ss = s:sub(1, p - 1)
+            insert(ret, ss)
+            s = s:sub(p + 1, #s)
+        end
+    end
+    return ret
+end
+
+function M:_makeTypes()
+    local im = self._image
+    local t = lib.mono_image_get_table_info(im, 2)
+    local rows = lib.mono_table_info_get_rows(t)
+    local types = {}
+    for i = 1, rows do
+        local col = ffi.new('uint32_t[?]', 6)
+        lib.mono_metadata_decode_row(t, i - 1, col, 6)
+        local name = col[1]
+        local ns = col[2]
+        name = ffi.string(lib.mono_metadata_string_heap(im, name))
+        ns = ffi.string(lib.mono_metadata_string_heap(im, ns))
+        if ns ~= '' then
+            table.insert(types, { name, ns })
+        end
+    end
+    self._types = types
+end
+
+function M:_makeIndex()
+    local ns = {}
+    for _, v in ipairs(self._types) do
+        local name, namespace = v[1], v[2]
+        local p = lib.mono_class_from_name(self._image, namespace, name)
+        assert(not ffi.isnullptr(p))
+        --print('class', namespace, name)
+        local cls = require('MonoClass')(p)
+        if not self._classes[namespace] then
+            self._classes[namespace] = {}
+        end
+        self._classes[namespace][name] = cls
+        self._classes[cls._hdl] = cls
+        local s = string_split(namespace, '%.')
+        if #s == 0 then
+            error('invalid namespace')
+        end
+        local cur_ns = ns
+        for i = 1, #s do
+            local si = s[i]
+            assert(si ~= '')
+            if i < #s then
+                if not cur_ns[si] then
+                    cur_ns[si] = {}
+                end
+                cur_ns = cur_ns[si]
+            else
+                if cur_ns[si] then
+                    cur_ns[si][name] = { cls }
+                else
+                    cur_ns[si] = { [name] = { cls } }
+                end
+
+                --[[
+                local ss = string_split(si, '+')
+                if #ss == 0 then
+                    error('invalid namespace')
+                else
+                    -- nested class
+                    for j = 1, #ss do
+                        local ssj = ss[j]
+                        if not cur_ns[ssj] then
+                            cur_ns[ssj] = {}
+                        end
+                        if j < #ss then
+                            cur_ns = cur_ns[ssj]
+                        else
+                            cur_ns[ssj][1] = v
+                        end
+                    end
+                end
+                ]]
+            end
+        end
+    end
+    self._index = ns
+end
 return M
