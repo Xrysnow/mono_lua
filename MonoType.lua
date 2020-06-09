@@ -218,4 +218,26 @@ function M.fromLua(v)
     error(("can't find mono type of '%s'"):format(ty))
 end
 
+function M.isBool(t)
+    make_value_info()
+    return t == value_type.bool
+end
+function M.isChar(t)
+    make_value_info()
+    return t == value_type.char
+end
+
+function M.isNumberic(t)
+    make_value_info()
+    return number_type[tostring(t)] ~= nil
+end
+function M.isFloat(t)
+    make_value_info()
+    return t == value_type.float
+end
+function M.isDouble(t)
+    make_value_info()
+    return t == value_type.double
+end
+
 return M
