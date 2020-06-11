@@ -240,4 +240,12 @@ function M.isDouble(t)
     return t == value_type.double
 end
 
+function M.convertNumber(t, v)
+    assert(M.isNumberic(t))
+    local ctype = number_type[tostring(t)] .. '[1]'
+    local ret = ffi.new(ctype)
+    ret[0] = v
+    return ret
+end
+
 return M
