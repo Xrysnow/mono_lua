@@ -248,4 +248,64 @@ function M.convertNumber(t, v)
     return ret
 end
 
+function M.check_sig(sig_t, arg)
+    local src, srck
+    if type(arg) == 'number' then
+        src = 'number'
+    else
+        src, srck = M.fromLua(arg)
+    end
+    local ok, fit = true, 0
+    local dst = sig_t
+    local dstk = lib.mono_class_from_mono_type(dst)
+    -- System.XXX -> internal XXX
+    local dst2 = lib.mono_class_get_type(dstk)
+    dst = ffi.isnullptr(dst2) and dst or dst2
+    if src == dst then
+        fit = 1
+    elseif src == 'number' then
+        if not M.isNumberic(dst) then
+            ok = false
+        elseif M.isDouble(dst) then
+            fit = 1
+        elseif M.isFloat(dst) then
+            fit = 2e-3
+        else
+            fit = 1e-3
+        end
+    else
+        -- enum should not assigned from number
+        --local dst_is_enum = lib.mono_class_is_enum(dstk) > 0
+        if lib.mono_class_is_assignable_from(dstk, srck) == 0 then
+            ok = false
+        end
+    end
+    return ok, fit
+end
+
+function M.find_best_fit(method_attrs, args, narg)
+    local best_fit = 0
+    local best
+    for _, v in ipairs(method_attrs) do
+        if v.sig.param_count == narg then
+            local ok, fit = true, 0
+            local types = v.sig.param_types
+            for i = 1, narg do
+                local f
+                ok, f = M.check_sig(types[i], args[i])
+                if not ok then
+                    break
+                end
+                fit = fit + f
+            end
+            -- only save first best
+            if fit > best_fit then
+                best_fit = fit
+                best = v
+            end
+        end
+    end
+    return best, best_fit
+end
+
 return M
