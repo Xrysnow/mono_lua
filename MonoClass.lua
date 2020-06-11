@@ -2,6 +2,7 @@
 local M = class('MonoClass')
 local lib = require('_lib')
 local ffi = require("ffi")
+require('ffi_util')
 
 function M:ctor(klass)
     check_ptr(klass, "invalid handle")
@@ -11,12 +12,13 @@ function M:ctor(klass)
     self._rank = tonumber(lib.mono_class_get_rank(klass))
     self._type = lib.mono_class_get_type(klass)
     --
-    self._fields = self:_getFields()
-    self._methods = self:_getMethods()
-    self._properties = self:_getProperties()
-    self._events = self:_getEvents()
-    self._interfaces = self:_getInterfaces()
-    self._nested_types = self:_getNestedTypes()
+    self:_parseAttr()
+    self:_getFields()
+    self:_getMethods()
+    self:_getProperties()
+    self:_getEvents()
+    self:_getInterfaces()
+    self:_getNestedTypes()
     --TODO: nested types
 end
 
@@ -98,117 +100,6 @@ end
 
 --
 
-function M:_getContents(f)
-    local ret = {}
-    local iter = ffi.new('void*[1]')
-    while true do
-        local p = f(self._hdl, iter)
-        if ffi.isnullptr(p) then
-            break
-        end
-        table.insert(ret, { hdl = p })
-    end
-    return ret
-end
-
-function M:_getFields()
-    local ret = self:_getContents(lib.mono_class_get_fields)
-    for i, t in ipairs(ret) do
-        local p = t.hdl
-        t.name = ffi.string(lib.mono_field_get_name(p))
-        t.type = lib.mono_field_get_type(p)
-        t.parent = lib.mono_field_get_parent(p)
-        t.flags = tonumber(lib.mono_field_get_flags(p))
-        t.offset = tonumber(lib.mono_field_get_offset(p))
-        t.data = lib.mono_field_get_data(p)
-    end
-    return ret
-end
-
-function M:_getMethods()
-    local ret = self:_getContents(lib.mono_class_get_methods)
-    for _, t in ipairs(ret) do
-        local p = t.hdl
-        t.signature = lib.mono_method_signature(p)
-        t.header = lib.mono_method_get_header(p)
-        t.name = ffi.string(lib.mono_method_get_name(p))
-        t.class = lib.mono_method_get_class(p)
-        t.token = tonumber(lib.mono_method_get_token(p))
-        t.index = tonumber(lib.mono_method_get_index(p))
-        --
-        local s = t.signature
-        local sig = {}
-        t.sig = sig
-        sig.return_type = lib.mono_signature_get_return_type(s)
-        local param_types = {}
-        sig.param_types = param_types
-        local iter = ffi.new('void*[1]')
-        while true do
-            local ty = lib.mono_signature_get_params(s, iter)
-            if ffi.isnullptr(ty) then
-                break
-            end
-            table.insert(param_types, ty)
-        end
-        sig.param_count = tonumber(lib.mono_signature_get_param_count(s))
-        sig.call_conv = tonumber(lib.mono_signature_get_call_conv(s))
-        sig.vararg_start = tonumber(lib.mono_signature_vararg_start(s))
-        sig.is_instance = lib.mono_signature_is_instance(s) > 0
-        sig.explicit_this = lib.mono_signature_explicit_this(s) > 0
-        local is_out = {}
-        sig.is_out = is_out
-        for i = 1, sig.param_count do
-            table.insert(is_out, lib.mono_signature_param_is_out(s, i - 1) > 0)
-        end
-        --
-        local names, tokens = {}, {}
-        local out = ffi.new('const char*[?]', sig.param_count)
-        lib.mono_method_get_param_names(p, out)
-        for i = 1, sig.param_count do
-            table.insert(names, ffi.string(check_ptr(out[i - 1])))
-            table.insert(tokens, tonumber(lib.mono_method_get_param_token(p, i - 1)))
-        end
-        t.param_names = names
-        t.param_tokens = tokens
-    end
-    return ret
-end
-
-function M:_getProperties()
-    local ret = self:_getContents(lib.mono_class_get_properties)
-    for i, t in ipairs(ret) do
-        local p = t.hdl
-        t.name = ffi.string(lib.mono_property_get_name(p))
-        t.setter = lib.mono_property_get_set_method(p)
-        t.getter = lib.mono_property_get_get_method(p)
-        t.parent = lib.mono_property_get_parent(p)
-        t.flags = tonumber(lib.mono_property_get_flags(p))
-    end
-    return ret
-end
-
-function M:_getEvents()
-    local ret = self:_getContents(lib.mono_class_get_events)
-    for i, t in ipairs(ret) do
-        local p = t.hdl
-        t.name = ffi.string(lib.mono_event_get_name(p))
-        t.add = lib.mono_event_get_add_method(p)
-        t.remove = lib.mono_event_get_remove_method(p)
-        t.raise = lib.mono_event_get_raise_method(p)
-        t.parent = lib.mono_event_get_parent(p)
-        t.flags = tonumber(lib.mono_event_get_flags(p))
-    end
-    return ret
-end
-
-function M:_getInterfaces()
-    return self:_getContents(lib.mono_class_get_interfaces)
-end
-
-function M:_getNestedTypes()
-    return self:_getContents(lib.mono_class_get_nested_types)
-end
-
 --
 
 function M:isValueType()
@@ -269,6 +160,292 @@ end
 function M:box(value)
     local o = lib.mono_value_box(lib.domain, self._hdl, ffi.cast('void*', value))
     return not ffi.isnullptr(o) and require('MonoObject')(o) or nil
+end
+
+--
+
+local band = bit.band
+local isnullptr = ffi.isnullptr
+local insert = table.insert
+local tonumber = tonumber
+local enum = require('enum')
+
+local function check_flags(flags, value)
+    return band(flags, value) > 0 or nil
+end
+local function check_ret(p)
+    return not isnullptr(p) and p or nil
+end
+
+function M:_parseAttr()
+    local flags = tonumber(lib.mono_class_get_flags(self._hdl))
+    self._flags = flags
+    local e = enum
+    local attr = {}
+    local vis = band(flags, e.MONO_TYPE_ATTR_VISIBILITY_MASK)
+    attr.is_public = vis == e.MONO_TYPE_ATTR_PUBLIC
+    attr.is_nested_public = vis == e.MONO_TYPE_ATTR_NESTED_PUBLIC
+    attr.is_sequential_layout = check_flags(flags, e.MONO_TYPE_ATTR_SEQUENTIAL_LAYOUT)
+    attr.is_explicit_layout = check_flags(flags, e.MONO_TYPE_ATTR_EXPLICIT_LAYOUT)
+    attr.is_interface = check_flags(flags, e.MONO_TYPE_ATTR_INTERFACE)
+    attr.is_abstract = check_flags(flags, e.MONO_TYPE_ATTR_ABSTRACT)
+    attr.is_sealed = check_flags(flags, e.MONO_TYPE_ATTR_SEALED)
+    attr.is_interface = check_flags(flags, e.MONO_TYPE_ATTR_INTERFACE)
+
+    attr.is_special_name = check_flags(flags, e.MONO_TYPE_ATTR_SPECIAL_NAME)
+    attr.is_import = check_flags(flags, e.MONO_TYPE_ATTR_IMPORT)
+    attr.is_serializable = check_flags(flags, e.MONO_TYPE_ATTR_SERIALIZABLE)
+
+    local fmt = band(flags, e.MONO_TYPE_ATTR_STRING_FORMAT_MASK)
+    local fmt_t = {
+        [e.MONO_TYPE_ATTR_ANSI_CLASS]    = 'ansi',
+        [e.MONO_TYPE_ATTR_UNICODE_CLASS] = 'unicode',
+        [e.MONO_TYPE_ATTR_AUTO_CLASS]    = 'auto',
+        [e.MONO_TYPE_ATTR_CUSTOM_CLASS]  = 'custom',
+    }
+    attr.string_format = fmt_t[fmt]
+
+    attr.is_before_field_init = check_flags(flags, e.MONO_TYPE_ATTR_BEFORE_FIELD_INIT)
+    attr.is_forwarder = check_flags(flags, e.MONO_TYPE_ATTR_FORWARDER)
+    self._attr = attr
+end
+
+function M:_getContents(f)
+    local ret = {}
+    local iter = ffi.new('void*[1]')
+    local hdl = self._hdl
+    while true do
+        local p = f(hdl, iter)
+        if isnullptr(p) then
+            break
+        end
+        insert(ret, { hdl = p })
+    end
+    return ret
+end
+
+local function parseFieldAttr(flags, t)
+    t = t or {}
+    local e = enum
+    local access = band(flags, e.MONO_FIELD_ATTR_FIELD_ACCESS_MASK)
+    t.is_public = access == e.MONO_FIELD_ATTR_PUBLIC
+    t.is_static = check_flags(flags, e.MONO_FIELD_ATTR_STATIC) or false
+    t.is_init_only = check_flags(flags, e.MONO_FIELD_ATTR_INIT_ONLY)
+    t.is_literal = check_flags(flags, e.MONO_FIELD_ATTR_LITERAL)
+    t.is_not_serialized = check_flags(flags, e.MONO_FIELD_ATTR_NOT_SERIALIZED)
+    t.is_special_name = check_flags(flags, e.MONO_FIELD_ATTR_SPECIAL_NAME)
+    t.is_pinvoke_impl = check_flags(flags, e.MONO_FIELD_ATTR_PINVOKE_IMPL)
+    return t
+end
+
+function M:_getFields()
+    self._fields = self:_getContents(lib.mono_class_get_fields)
+    self._fields_public = {}
+    self._fields_public_static = {}
+    for _, t in ipairs(self._fields) do
+        local p = t.hdl
+        t.name = ffi.string(lib.mono_field_get_name(p))
+        t.type = lib.mono_field_get_type(p)
+        t.parent = check_ret(lib.mono_field_get_parent(p))
+        t.flags = tonumber(lib.mono_field_get_flags(p))
+        t.offset = tonumber(lib.mono_field_get_offset(p))
+        t.data = check_ret(lib.mono_field_get_data(p))
+        parseFieldAttr(t.flags, t)
+        --
+        if t.is_public then
+            if t.is_static then
+                self._fields_public_static[t.name] = t
+            else
+                self._fields_public[t.name] = t
+            end
+        end
+    end
+end
+
+local function parseMethodAttr(flags, iflags, t)
+    t = t or {}
+    local e = enum
+    local access = band(flags, e.MONO_METHOD_ATTR_ACCESS_MASK)
+    t.is_public = access == e.MONO_METHOD_ATTR_PUBLIC
+    t.is_static = check_flags(flags, e.MONO_METHOD_ATTR_STATIC) or false
+    t.is_final = check_flags(flags, e.MONO_METHOD_ATTR_FINAL)
+    t.is_virtual = check_flags(flags, e.MONO_METHOD_ATTR_VIRTUAL)
+    t.is_hide_by_sig = check_flags(flags, e.MONO_METHOD_ATTR_HIDE_BY_SIG)
+    t.is_new_slot = check_flags(flags, e.MONO_METHOD_ATTR_NEW_SLOT)
+    t.is_strict = check_flags(flags, e.MONO_METHOD_ATTR_STRICT)
+    t.is_abstract = check_flags(flags, e.MONO_METHOD_ATTR_ABSTRACT)
+    t.is_special_name = check_flags(flags, e.MONO_METHOD_ATTR_SPECIAL_NAME)
+    t.is_pinvoke_impl = check_flags(flags, e.MONO_METHOD_ATTR_PINVOKE_IMPL)
+    t.is_unmanaged_export = check_flags(flags, e.MONO_METHOD_ATTR_UNMANAGED_EXPORT)
+    return t
+end
+local function parseSignature(ptr, sig)
+    local s = ptr
+    sig.return_type = lib.mono_signature_get_return_type(s)
+    local param_types = {}
+    sig.param_types = param_types
+    local iter = ffi.new('void*[1]')
+    while true do
+        local ty = lib.mono_signature_get_params(s, iter)
+        if ffi.isnullptr(ty) then
+            break
+        end
+        insert(param_types, ty)
+    end
+    sig.param_count = tonumber(lib.mono_signature_get_param_count(s))
+    sig.call_conv = tonumber(lib.mono_signature_get_call_conv(s))
+    sig.vararg_start = tonumber(lib.mono_signature_vararg_start(s))
+    sig.is_instance = lib.mono_signature_is_instance(s) > 0
+    sig.explicit_this = lib.mono_signature_explicit_this(s) > 0
+    local is_out = {}
+    sig.is_out = is_out
+    for i = 1, sig.param_count do
+        insert(is_out, lib.mono_signature_param_is_out(s, i - 1) > 0)
+    end
+end
+
+local _op_names = {
+    'op_Implicit',
+    'op_Explicit',
+
+    'op_BitwiseAnd',
+    'op_BitwiseOr',
+    'op_ExclusiveOr',
+    'op_LeftShift',
+    'op_RightShift',
+
+    'op_OnesComplement',
+    'op_UnaryNegation',
+    'op_UnaryPlus',
+
+    'op_Increment',
+    'op_Decrement',
+
+    'op_Addition',
+    'op_Subtraction',
+    'op_Multiply',
+    'op_Division',
+    'op_Modulus',
+
+    'op_LessThan',
+    'op_LessThanOrEqual',
+    'op_GreaterThan',
+    'op_GreaterThanOrEqual',
+    'op_Equality',
+    'op_Inequality',
+}
+for i = 1, #_op_names do
+    _op_names[_op_names[i]] = true
+end
+
+function M:_getMethods()
+    self._methods = self:_getContents(lib.mono_class_get_methods)
+    self._methods_public = {}
+    self._methods_public_static = {}
+    self._operators = {}
+    for _, t in ipairs(self._methods) do
+        local p = t.hdl
+        t.name = ffi.string(lib.mono_method_get_name(p))
+        t.signature = check_ret(lib.mono_method_signature(p))
+        t.header = check_ret(lib.mono_method_get_header(p))
+        t.class = check_ret(lib.mono_method_get_class(p))
+        t.token = tonumber(lib.mono_method_get_token(p))
+        t.index = tonumber(lib.mono_method_get_index(p))
+        --
+        local iflags = ffi.new('uint32_t[1]')
+        t.flags = tonumber(lib.mono_method_get_flags(p, iflags))
+        t.iflags = tonumber(iflags[0])
+        parseMethodAttr(t.flags, t.iflags, t)
+        --
+        local sig = {}
+        t.sig = sig
+        parseSignature(t.signature, sig)
+        --
+        local names, tokens = {}, {}
+        local out = ffi.new('const char*[?]', sig.param_count)
+        lib.mono_method_get_param_names(p, out)
+        for i = 1, sig.param_count do
+            insert(names, ffi.string(check_ptr(out[i - 1])))
+            insert(tokens, tonumber(lib.mono_method_get_param_token(p, i - 1)))
+        end
+        t.param_names = names
+        t.param_tokens = tokens
+        -- methods can have same name
+        if t.is_public then
+            if t.is_static then
+                self._methods_public_static[t.name] = true
+                if _op_names[t.name] and t.is_special_name then
+                    -- operator
+                    insert(self._operators, t)
+                    self._operators[t.name] = true
+                end
+            else
+                self._methods_public[t.name] = true
+            end
+        end
+    end
+end
+
+function M:_getProperties()
+    self._properties = self:_getContents(lib.mono_class_get_properties)
+    self._properties_method = {}
+    for _, t in ipairs(self._properties) do
+        local p = t.hdl
+        t.name = ffi.string(lib.mono_property_get_name(p))
+        t.setter = check_ret(lib.mono_property_get_set_method(p))
+        t.getter = check_ret(lib.mono_property_get_get_method(p))
+        t.parent = check_ret(lib.mono_property_get_parent(p))
+        t.flags = tonumber(lib.mono_property_get_flags(p))
+        --
+        local e = enum
+        t.is_special_name = check_flags(t.flags, e.MONO_PROPERTY_ATTR_SPECIAL_NAME)
+        t.has_default = check_flags(t.flags, e.MONO_PROPERTY_ATTR_HAS_DEFAULT)
+        --
+        if t.getter then
+            local hdl = t.getter
+            local attr = { hdl = hdl }
+            t.getter = attr
+            local iflags = ffi.new('uint32_t[1]')
+            attr.flags = tonumber(lib.mono_method_get_flags(hdl, iflags))
+            parseMethodAttr(attr.flags, iflags[0], attr)
+            attr.signature = check_ret(lib.mono_method_signature(hdl))
+            attr.sig = {}
+            parseSignature(attr.signature, attr.sig)
+        end
+        if t.setter then
+            local hdl = t.setter
+            local attr = { hdl = hdl }
+            t.setter = attr
+            local iflags = ffi.new('uint32_t[1]')
+            attr.flags = tonumber(lib.mono_method_get_flags(hdl, iflags))
+            parseMethodAttr(attr.flags, iflags[0], attr)
+            attr.signature = check_ret(lib.mono_method_signature(hdl))
+            attr.sig = {}
+            parseSignature(attr.signature, attr.sig)
+        end
+        self._properties_method[t.name] = { t.getter, t.setter }
+    end
+end
+
+function M:_getEvents()
+    self._events = self:_getContents(lib.mono_class_get_events)
+    for _, t in ipairs(self._events) do
+        local p = t.hdl
+        t.name = ffi.string(lib.mono_event_get_name(p))
+        t.add = check_ret(lib.mono_event_get_add_method(p))
+        t.remove = check_ret(lib.mono_event_get_remove_method(p))
+        t.raise = check_ret(lib.mono_event_get_raise_method(p))
+        t.parent = check_ret(lib.mono_event_get_parent(p))
+        t.flags = tonumber(lib.mono_event_get_flags(p))
+    end
+end
+
+function M:_getInterfaces()
+    self._interfaces = self:_getContents(lib.mono_class_get_interfaces)
+end
+
+function M:_getNestedTypes()
+    self._nested_types = self:_getContents(lib.mono_class_get_nested_types)
 end
 
 -- internal classes
