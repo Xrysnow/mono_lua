@@ -90,6 +90,10 @@ function M:getNamespace()
     return self._ns
 end
 
+function M:getAttr()
+    return self._attr
+end
+
 function M:getType()
     return self._type
 end
