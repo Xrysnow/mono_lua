@@ -87,6 +87,16 @@ function M:_getMethods(name, need_public, need_static)
     return ret
 end
 
+function M:_getOperators(name)
+    local ret = {}
+    for _, v in ipairs(self._operators) do
+        if v.name == name then
+            table.insert(ret, v)
+        end
+    end
+    return ret
+end
+
 --
 
 function M:getRank()
