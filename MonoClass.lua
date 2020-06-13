@@ -75,7 +75,7 @@ end
 --
 
 function M:getRank()
-    return tonumber(lib.mono_class_get_rank(self._hdl))
+    return self._rank
 end
 
 function M:getName()
