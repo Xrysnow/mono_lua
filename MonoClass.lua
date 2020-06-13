@@ -78,10 +78,6 @@ function M:getRank()
     return tonumber(lib.mono_class_get_rank(self._hdl))
 end
 
-function M:getFlags()
-    return tonumber(lib.mono_class_get_flags(self._hdl))
-end
-
 function M:getName()
     return self._name
 end
