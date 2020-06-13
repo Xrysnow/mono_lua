@@ -91,14 +91,12 @@ function M:getNamespace()
 end
 
 function M:getType()
-    return lib.mono_class_get_type(self._hdl)
+    return self._type
 end
 
 function M:getByrefType()
     return lib.mono_class_get_byref_type(self._hdl)
 end
-
---
 
 --
 
