@@ -74,6 +74,21 @@ end
 
 --
 
+function M:_getMethods(name, need_public, need_static)
+    local ret = {}
+    for _, v in ipairs(self._methods) do
+        local ok = v.name == name
+        ok = ok and (v.is_public or not need_public)
+        ok = ok and (v.is_static or not need_static)
+        if ok then
+            table.insert(ret, v)
+        end
+    end
+    return ret
+end
+
+--
+
 function M:getRank()
     return self._rank
 end
